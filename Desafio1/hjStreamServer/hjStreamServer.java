@@ -7,9 +7,7 @@
 import java.io.*;
 import java.net.*;
 import javax.crypto.Cipher;
-import javax.crypto.spec.ChaCha20ParameterSpec;
 import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.SecureRandom;
 
@@ -38,16 +36,15 @@ class hjStreamServer {
 		InetSocketAddress addr = new InetSocketAddress( args[1], Integer.parseInt(args[2]));
 		
 		// Create key
-		byte[] keyBytes = "0123456789abcdef0123456789abcdef".getBytes();
-        SecretKeySpec key = new SecretKeySpec(keyBytes, "ChaCha20"); // Now ChaCha20
+		byte[] keyBytes = "0123456789abcdef".getBytes();
+		SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
+		SecureRandom random = new SecureRandom();	// SecureRandom() >> Random()
 
 		// Packet UDP sent  
-		DatagramPacket p = new DatagramPacket(buff, buff.length, addr);
+		DatagramPacket p = new DatagramPacket(buff, buff.length, addr );
 
 		long t0 = System.nanoTime(); // Ref. time 
 		long q0 = 0;
-
-		SecureRandom random = new SecureRandom();
 
 		// While there is movie to stream, them send...
 		while (g.available() > 0) {
@@ -64,9 +61,9 @@ class hjStreamServer {
 			byte[] iv = new byte[12];
 			random.nextBytes(iv);
 
-			// Starts ChaCha20
-			Cipher cipher = Cipher.getInstance("ChaCha20-Poly1305"); // Now ChaCha20
-			IvParameterSpec spec = new IvParameterSpec(iv);
+			// Starts AES-GCM
+			Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+			GCMParameterSpec spec = new GCMParameterSpec(128, iv);
 			cipher.init(Cipher.ENCRYPT_MODE, key, spec);
 
 			// Cypher frame
@@ -85,7 +82,7 @@ class hjStreamServer {
 			long t = System.nanoTime(); // what time is it?
 			Thread.sleep( Math.max(0, ((time-q0)-(t-t0))/1000000));
 		   
-			// Frames sent encrypted using ChacHa20
+			// Frames sent encrypted using AES-GCM
 			s.send(p); 
 
 	        // Debug "."

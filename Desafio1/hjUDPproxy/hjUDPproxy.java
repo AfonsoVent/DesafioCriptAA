@@ -21,14 +21,12 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
 import javax.crypto.Cipher;
-import javax.crypto.spec.ChaCha20ParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 class hjUDPproxy {
@@ -44,9 +42,9 @@ class hjUDPproxy {
         Properties properties = new Properties();
         properties.load(inputStream);
 	    
-        // Chacha key
-        byte[] keyBytes = "0123456789abcdef0123456789abcdef".getBytes();
-        SecretKeySpec key = new SecretKeySpec(keyBytes, "ChaCha20");
+        // Define AES key (the same one)
+        byte[] keyBytes = "0123456789abcdef".getBytes();
+        SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
 
         // Read endpoints (remote of prop and localdelivery of prop)
         String remote = properties.getProperty("remote");
@@ -62,7 +60,6 @@ class hjUDPproxy {
         
         // Buffer
         byte[] buffer = new byte[4 * 1024];
-        SecureRandom random = new SecureRandom();
        
         while (true) {
             // Prepare packet
@@ -71,7 +68,6 @@ class hjUDPproxy {
 
             // Debug "."
             System.out.print(".");
-
             for(SocketAddress outSocketAddress : outSocketAddressSet) 
             {   
                 // The Data
@@ -82,11 +78,11 @@ class hjUDPproxy {
                 byte[] cipherTxt = Arrays.copyOfRange(data, 12, data.length);
 
                 // Prepare Key
-                Cipher cipher = Cipher.getInstance("ChaCha20-Poly1305");
-                IvParameterSpec spec = new IvParameterSpec(iv);
+                Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
+                GCMParameterSpec spec = new GCMParameterSpec(128, iv);
                 cipher.init(Cipher.DECRYPT_MODE, key, spec);
 
-                // Decrypt to plain
+                // ""Cypher"" to plain
                 byte[] plain = cipher.doFinal(cipherTxt);
 
                 // Sends to player
