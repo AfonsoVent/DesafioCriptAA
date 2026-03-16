@@ -21,15 +21,10 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
-import javax.crypto.Cipher;
-import javax.crypto.spec.ChaCha20ParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 
 class hjUDPproxy {
     public static void main(String[] args) throws Exception {
@@ -45,8 +40,8 @@ class hjUDPproxy {
         properties.load(inputStream);
 	    
         // Chacha key
-        byte[] keyBytes = "0123456789abcdef0123456789abcdef".getBytes();
-        SecretKeySpec key = new SecretKeySpec(keyBytes, "ChaCha20");
+        byte[] key = "0123456789abcdef0123456789abcdef".getBytes();
+        DPRG dprg = new DPRG(key); 
 
         // Read endpoints (remote of prop and localdelivery of prop)
         String remote = properties.getProperty("remote");
@@ -62,7 +57,6 @@ class hjUDPproxy {
         
         // Buffer
         byte[] buffer = new byte[4 * 1024];
-        SecureRandom random = new SecureRandom();
        
         while (true) {
             // Prepare packet
@@ -75,19 +69,16 @@ class hjUDPproxy {
             for(SocketAddress outSocketAddress : outSocketAddressSet) 
             {   
                 // The Data
-                byte[] data = Arrays.copyOf(inPacket.getData(), inPacket.getLength());
-                
-                // [0, 12] - IV; [12, until end] - ciphertext
-                byte[] iv = Arrays.copyOfRange(data, 0, 12);
-                byte[] cipherTxt = Arrays.copyOfRange(data, 12, data.length);
+                byte[] cipher = Arrays.copyOf(inPacket.getData(), inPacket.getLength());
 
                 // Prepare Key
-                Cipher cipher = Cipher.getInstance("ChaCha20-Poly1305");
-                IvParameterSpec spec = new IvParameterSpec(iv);
-                cipher.init(Cipher.DECRYPT_MODE, key, spec);
+                byte[] keystream = dprg.generate(cipher.length);
 
                 // Decrypt to plain
-                byte[] plain = cipher.doFinal(cipherTxt);
+                byte[] plain = new byte[cipher.length];
+
+                // XOR op
+                for(int i = 0; i < cipher.length; i++) plain[i] = (byte)(cipher[i] ^ keystream[i]);
 
                 // Sends to player
                 DatagramPacket outPacket = new DatagramPacket(plain, plain.length, outSocketAddress);

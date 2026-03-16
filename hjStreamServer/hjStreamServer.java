@@ -6,12 +6,6 @@
 
 import java.io.*;
 import java.net.*;
-import javax.crypto.Cipher;
-import javax.crypto.spec.ChaCha20ParameterSpec;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import java.security.SecureRandom;
 
 class hjStreamServer {
 	static public void main( String []args ) throws Exception {
@@ -30,16 +24,16 @@ class hjStreamServer {
  		long time;	// timer
 
 		// Opens the movie
-		DataInputStream g = new DataInputStream( new FileInputStream(args[0]) );
+		DataInputStream g = new DataInputStream( new FileInputStream(args[0]));
 		byte[] buff = new byte[4096];
 
 		// Send socket UDP
 		DatagramSocket s = new DatagramSocket();
-		InetSocketAddress addr = new InetSocketAddress( args[1], Integer.parseInt(args[2]));
+		InetSocketAddress addr = new InetSocketAddress(args[1], Integer.parseInt(args[2]));
 		
 		// Create key
-		byte[] keyBytes = "0123456789abcdef0123456789abcdef".getBytes();
-        SecretKeySpec key = new SecretKeySpec(keyBytes, "ChaCha20"); // Now ChaCha20
+		byte[] key = "0123456789abcdef0123456789abcdef".getBytes();
+        DPRG dprg = new DPRG(key); 
 
 		// Packet UDP sent  
 		DatagramPacket p = new DatagramPacket(buff, buff.length, addr);
@@ -47,39 +41,29 @@ class hjStreamServer {
 		long t0 = System.nanoTime(); // Ref. time 
 		long q0 = 0;
 
-		SecureRandom random = new SecureRandom();
-
 		// While there is movie to stream, them send...
 		while (g.available() > 0) {
+
 		    size = g.readShort(); // size of the frame
 		    csize=csize+size;
 		    time = g.readLong();  // timestamp of the frame
+
 			if (count == 0) q0 = time; // ref. time in the stream
 			count += 1;
 			
 			// Read the bytes
 			g.readFully(buff, 0, size);
+
+			// gen keystream
+			byte[] keystream = dprg.generate(size);
+
+			byte[] cipher = new byte[size];
+
+			// Op Xor
+			for(int i=0;i<size;i++) cipher[i] = (byte)(buff[i] ^ keystream[i]);
 			
-			// IV frame
-			byte[] iv = new byte[12];
-			random.nextBytes(iv);
-
-			// Starts ChaCha20
-			Cipher cipher = Cipher.getInstance("ChaCha20-Poly1305"); // Now ChaCha20
-			IvParameterSpec spec = new IvParameterSpec(iv);
-			cipher.init(Cipher.ENCRYPT_MODE, key, spec);
-
-			// Cypher frame
-			byte[] cipherText = cipher.doFinal(buff, 0, size);
-
-			// Prepare array - Send: [IV, ciphertext]
-			byte[] packetData = new byte[iv.length + cipherText.length];
-			System.arraycopy(iv, 0, packetData, 0, iv.length);   
-			System.arraycopy(cipherText, 0, packetData, iv.length, cipherText.length);
-
-			// Data
-			p.setData(packetData, 0, packetData.length);
-			p.setSocketAddress(addr);
+			p.setData(cipher,0,size);
+            p.setSocketAddress(addr);
 
 			// Timer to streaming
 			long t = System.nanoTime(); // what time is it?
